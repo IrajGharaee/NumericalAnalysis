@@ -27,7 +27,6 @@ for i in range(0, n - 1):
     S[i][1][x] = b[i] + 2*c[i]*(x - x_i) + 3*d[i]*(x - x_i)**2
     S[i][2][x] = 2*c[i] + 6*d[i]*(x - x_i)
 
-
 #   equations:
 #       for i in range(0, n - 1):
 #           if i != 0 and i != n - 1:
