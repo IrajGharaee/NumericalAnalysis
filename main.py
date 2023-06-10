@@ -1,68 +1,84 @@
-import itertools
-
 import numpy as np
-import sympy as sym
-from collections import OrderedDict
-
-n = int(input('How many distinct point you have? '))
-points: dict[float, float] = OrderedDict()
-
-S = []
-a = []
-b = []
-c = []
-d = []
-print('Now type x and ys in order')
-
-for i in range(0, n):
-    x = float(input(f'x_{i} is: '))
-    y = float(input(f'y_{i} is: '))
-    points[x] = y
-    if i != n - 1:
-        a[i] = y
-
-for i in range(0, n - 1):
-    x_i = next(itertools.islice(points.items(), i - 1, i))[0]
-    S[i][0][x] = a[i] + b[i]*(x - x_i) + c[i]*(x - x_i)**2 + d[i]*(x - x_i)**3
-    S[i][1][x] = b[i] + 2*c[i]*(x - x_i) + 3*d[i]*(x - x_i)**2
-    S[i][2][x] = 2*c[i] + 6*d[i]*(x - x_i)
-
-#   equations:
-#       for i in range(0, n - 1):
-#           if i != 0 and i != n - 1:
-#               x_i = next(itertools.islice(points.items(), i - 1, i))[0]
-#               x_j = next(itertools.islice(points.items(), i, i + 1))[0]
-#               S[i][0][i] = S[i][0][j]
-#               S[i][1][i] = S[i][1][j]
-#               S[i][2][i] = S[i][2][j]
-#           elif i == 0:
-#               S[i][0][i] = next(iter(points))
-#               S[i][1][i] = S[i][1][j]
-#               S[i][2][i] = S[i][2][j]
-#           else:
-#               S[i][0][i] = S[i][0][j]
-#               S[i][1][i] = S[i][1][j]
-#               S[i][2][i] = next(itertools.islice(points.items(), n - 1, n))[0]
+from scipy.linalg import solve
+import matplotlib.pyplot as plt
+from sympy import symbols
+from sympy.plotting import plot
 
 
-print()
+def cubic_spline_coefficients2(x, y):
+    n = len(x) - 1
+    h = x[1:] - x[:-1]
+    A = np.reshape(np.zeros((n ** 2) - (2 * n) + 1), (n - 1, n - 1))
+    b = np.zeros(n - 1)
+    c = np.zeros(n - 1)
+    d = np.zeros(n - 1)
 
-# # Create a symbolic variable 'x'
-# x = sym.symbols('x')
-#
-# # Define a symbolic expression using 'x'
-# expr = x**2 + 2*x + 1
-#
-# # Find the derivative of the expression with respect to 'x'
-# dv = sym.diff(expr, x)
-#
-# # Print the derivative
-# print(dv)
+    row1 = [2 * (h[0] + h[1]), h[1]]
+    rown = [h[n - 2], 2 * (h[n - 2] + h[n - 1])]
+
+    if n > 3:
+        A[n - 2] = list(np.zeros(n - 3)) + rown
+        b[n - 2] = (y[n] - y[n - 1]) / h[n - 1] - (y[n - 1] - y[n - 2]) / h[n - 2]
+        b[n - 3] = (y[n - 1] - y[n - 2]) / h[n - 2] - (y[n - 2] - y[n - 3]) / h[n - 3]
+        A[0] = row1 + list(np.zeros(n - 3))
+        for i in range(0, n-1):
+            if i < n-3:
+                A[i + 1] = list(np.zeros(i)) + [h[i + 1], 2 * (h[i + 1] + h[i + 2]), h[i + 2]] + list(np.zeros(n - i - 4))
+            b[i] = ((y[i + 2] - y[i + 1]) / h[i + 1]) - ((y[i + 1] - y[i]) / h[i])
+
+    elif n == 3:
+        A[0] = row1
+        A[1] = rown
+        for i in range(0, 2):
+            b[i] = ((y[i + 2] - y[i + 1]) / h[i + 1]) - ((y[i + 1] - y[i]) / h[i])
+    elif n == 2:
+        m = (((y[2] - y[1]) / h[1]) - ((y[1] - y[0]) / h[0])) / (2 * (h[0] + h[1]))
+        return m, h
+
+    m = np.linalg.solve(A, b)
+    return np.around(m, decimals=4), h
 
 
+def cubic_spline_interpolation(t, y):
+    n = len(t) - 1
+    m, h = cubic_spline_coefficients2(t, y)
+    print(m)
+    print(h)
+    d = np.zeros(n)
+    c = np.zeros(n)
+    splines = ['a' for i in range(0, n)]
+    x = symbols('x')
+    a2 = plot(x**2, show=False)
+    for i in range(0, n):
+        if i == 0:
+            d[i] = y[i]
+            c[i] = (y[i+1] - y[i])/h[i] - h[i] * (m[i])
+            # splines[i] = f'(x - {y[i]})^3 * {m[i]}/{h[i]} + {c[i]}(x - {y[i]}) + {d[i]}'
+            a1 = plot((x - t[i])**3 * m[i]/h[i] + c[i]*(x - t[i]) + d[i], (x, t[i], t[i+1]), show=False)
+            a2.append(a1[0])
+        elif i == n-1:
+            d[i] = y[i] - (h[i] ** 2) * m[i-1]
+            c[i] = (y[i + 1] - y[i]) / h[i] + h[i] * (m[i-1])
+            # splines[i] = f'-(x - {y[i + 1]})^3 * {m[i-1]}/{h[i]} + {c[i]}(x - {y[i]}) + {d[i]}'
+            a1 = plot(-(x - t[i + 1])**3 * m[i-1]/h[i] + c[i]*(x - t[i]) + d[i], (x, t[i], t[i+1]), show=False)
+            a2.append(a1[0])
+        else:
+            d[i] = y[i] - (h[i] ** 2) * m[i-1]
+            # print(i)
+            c[i] = (y[i + 1] - y[i]) / h[i] + h[i] * (m[i-1] - m[i])
+            # splines[i] = -(x - y[i+1])**3 * m[i-1]/h[i] + (x - y[i])**3 * m[i]/h[i] + c[i]*(x - y[i]) + d[i]
+            a1 = plot(-(x - t[i+1])**3 * m[i-1]/h[i] + (x - t[i])**3 * m[i]/h[i] + c[i]*(x - t[i]) + d[i], (x, t[i], t[i+1]), show=False)
+            a2.append(a1[0])
+    a2.show()
+    # for i in range(0, 5):
+    #     print(splines[i])
+    # plot(splines[0], (x, -5, 5))
 
 
+X = np.array([0, 1, 2, 3, 4, 5])
+Y = np.array([0, 1, 4, 9, 16, 25])
+cubic_spline_interpolation(X, Y)
 
-
-
-
+# plt.plot(X, Y, 'o')
+# plt.plot(Xi, Yi)
+# plt.show()
